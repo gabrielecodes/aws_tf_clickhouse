@@ -2,6 +2,8 @@
 
 This project provides a Terraform configuration to deploy a highly available and fault-tolerant ClickHouse data warehouse cluster on AWS, integrated with Metabase as a business intelligence frontend.
 
+![cluster](clickhouse_cluster.svg)
+
 ## What this Project Provides
 
 Upon successful deployment, this project will provision:
