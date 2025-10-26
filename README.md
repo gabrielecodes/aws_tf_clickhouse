@@ -90,16 +90,7 @@ The Terraform configuration sets up the following AWS resources:
     Navigate to `http://<Metabase_Public_IP>:8080` in your web browser.
     Complete the Metabase setup wizard.
 
-8.  Connect Metabase to ClickHouse:
-    In the Metabase UI, add a new database connection:
-
-    - **Database type:** ClickHouse
-    - **Host:** Use one of the private DNS names of your ClickHouse nodes (e.g., `ip-10-0-2-X.ec2.internal`). You can find these in the AWS EC2 console or by inspecting Terraform outputs if you add an output for them.
-    - **Port:** `8123` (HTTP port for ClickHouse)
-    - **Username:** `metabase`
-    - **Password:** The `clickhouse_metabase_password` you set in `terraform.tfvars` (or the default `metabase_password`).
-
-9.  Clean Up:
+8.  Clean Up:
     To deprovision the resources:
 
     ```bash
