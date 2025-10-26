@@ -1,0 +1,142 @@
+#cloud-config
+runcmd:
+  # Install ClickHouse
+  - apt-get update
+  - apt-get install -y apt-transport-https ca-certificates curl
+  - curl -fsSL https://packages.clickhouse.com/ClickHouse.gpg | gpg --dearmor > /etc/apt/trusted.gpg.d/clickhouse.gpg
+  - echo "deb [arch=amd64] https://packages.clickhouse.com/deb stable main" | tee /etc/apt/sources.list.d/clickhouse.list
+  - apt-get update
+  - apt-get install -y clickhouse-server clickhouse-client
+
+  # Start ClickHouse
+  - systemctl enable clickhouse-server
+  - systemctl start clickhouse-server
+
+  # Generate self-signed SSL certificates
+  - openssl req -subj "/CN=$(hostname)" -new -newkey rsa:2048 -days 365 -nodes -x509 -keyout /etc/clickhouse-server/server.key -out /etc/clickhouse-server/server.crt
+  - openssl dhparam -out /etc/clickhouse-server/dhparam.pem 4096
+
+  # Configure ClickHouse for remote access and metabase user
+  - |
+    cat <<EOF > /etc/clickhouse-server/config.xml
+    <clickhouse>
+      <server_id>${server_id}</server_id>
+
+      <listen_host>0.0.0.0</listen_host>
+      <http_port>8123</http_port>
+      <https_port>8443</https_port>
+      <tcp_port>9000</tcp_port>
+      <interserver_http_port>9009</interserver_http_port>
+
+      <path>/var/lib/clickhouse/</path>
+      <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+      <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+      <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+      <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+      <error_log_path>/var/log/clickhouse-server/clickhouse-server.err.log</error_log_path>
+      <pid_path>/var/run/clickhouse-server/clickhouse-server.pid</pid_path>
+      
+      <logger>
+          <level>warning</level>
+          <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+          <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+          <size>1000M</size>
+          <count>10</count>
+      </logger>
+
+      <openSSL>
+          <server>
+              <certificateFile>/etc/clickhouse-server/server.crt</certificateFile>
+              <privateKeyFile>/etc/clickhouse-server/server.key</privateKeyFile>
+              <dhParamsFile>/etc/clickhouse-server/dhparam.pem</dhParamsFile>
+              <loadDefaultCAFile>true</loadDefaultCAFile>
+              <cacheSessions>true</cacheSessions>
+              <disableProtocols>sslv2,sslv3</disableProtocols>
+              <preferServerCiphers>true</preferServerCiphers>
+          </server>
+          <client>
+              <loadDefaultCAFile>true</loadDefaultCAFile>
+              <cacheSessions>true</cacheSessions>
+              <disableProtocols>sslv2,sslv3</disableProtocols>
+              <preferServerCiphers>true</preferServerCiphers>
+              <invalidCertificateHandler>
+                  <name>AcceptCertificateHandler</name>
+              </invalidCertificateHandler>
+          </client>
+      </openSSL>
+            
+      <remote_servers>
+          <${cluster_name}>
+              <shard>
+                  <internal_replication>true</internal_replication>
+                  %{ for dns_name in private_dns ~}
+                  <replica>
+                      <host>${dns_name}</host>
+                      <port>9000</port>
+                  </replica>
+                  %{ endfor ~}
+              </shard>
+          </${cluster_name}>
+      </remote_servers>
+        
+      <profiles>
+          <default>
+              <max_memory_usage>10000000000</max_memory_usage> <max_rows_to_read>10000000000</max_rows_to_read>
+          </default>
+      </profiles>
+
+      <include_from>/etc/clickhouse-server/conf.d/*.xml</include_from>
+
+      <!-- ClickHouse Keeper Configuration -->
+      <keeper_server>
+          <tcp_port>9234</tcp_port>
+          <server_id>${server_id}</server_id>
+          <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+          <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+          <coordination_settings>
+              <operation_timeout_ms>10000</operation_timeout_ms>
+              <session_timeout_ms>100000</session_timeout_ms>
+              <raft_logs_level>trace</raft_logs_level>
+              <auto_create_tables>true</auto_create_tables>
+          </coordination_settings>
+          <raft_configuration>
+              %{ for id, dns_name in private_dns ~}
+              <server>
+                  <id>${id + 1}</id>
+                  <hostname>${dns_name}</hostname>
+                  <port>9234</port>
+              </server>
+              %{ endfor ~}
+          </raft_configuration>
+      </keeper_server>
+
+      <!-- ClickHouse Server ZooKeeper/Keeper Client Configuration -->
+      <zookeeper>
+          <node>
+              %{ for id, dns_name in private_dns ~}
+              <host>${dns_name}</host>
+              <port>9234</port>
+              %{ endfor ~}
+          </node>
+          <session_timeout_ms>30000</session_timeout_ms>
+      </zookeeper>
+
+    </clickhouse>
+
+  - |
+    cat <<EOF > /etc/clickhouse-server/users.xml
+    <yandex>
+        <users>
+            <metabase>
+                <password>${clickhouse_metabase_password}</password>
+                <networks>
+                    <ip>::/0</ip>
+                </networks>
+                <profile>default</profile>
+                <quota>default</quota>
+            </metabase>
+        </users>
+    </yandex>
+    EOF
+
+  - systemctl restart clickhouse-server
