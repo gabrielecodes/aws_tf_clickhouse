@@ -23,7 +23,7 @@ variable "ec2_key" {
 ### Subnets
 
 variable "public_subnet_cidr" {
-  description = "A list of CIDR blocks for public subnets."
+  description = "CIDR block for the public subnets."
   type        = string
   default     = "10.0.1.0/24"
 }

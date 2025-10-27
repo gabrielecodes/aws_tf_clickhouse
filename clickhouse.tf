@@ -110,6 +110,7 @@ resource "aws_instance" "clickhouse_node" {
     is_coordinator               = each.key == "node1"
     cluster_name                 = var.clickhouse_cluster_name
     private_dns                  = values(aws_instance.clickhouse_node)[*].private_dns
+    metabase_cidr                = var.public_subnet_cidr
     clickhouse_metabase_password = var.clickhouse_metabase_password # password for the metabase "user"
   })
 
