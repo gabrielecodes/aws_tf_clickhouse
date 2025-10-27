@@ -34,6 +34,12 @@ variable "private_subnet_cidrs" {
   default     = ["10.0.2.0/24", "10.0.3.0/24", "10.0.4.0/24"]
 }
 
+variable "secure_tcp_port" {
+  description = "The secure TCP port (e.g., 9440) for ClickHouse."
+  type        = number
+  default     = 9440
+}
+
 ### Metabase
 
 variable "metabase_instance_type" {

@@ -47,7 +47,7 @@ The Terraform configuration sets up the following AWS resources:
     - Install [Terraform](https://www.terraform.io/downloads).
     - Configure your [AWS CLI credentials](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
     - Create an [EC2 Key Pair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html) in your desired AWS region.
-      - The EC2 Key Pair is used to SSH into the metabase and clickhouse instances. It can be generated with the `ssh-keygen` utility.
+      - The EC2 Key Pair is used to connect via SSH to the metabase and clickhouse instances. It can be generated with the `ssh-keygen` utility.
       - Consider using distinct keys in production.      
 
 2.  Clone the Repository:
