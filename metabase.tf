@@ -9,18 +9,9 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 }
 
-# Get the IP address of this machine
-data "http" "my_ip" {
-  url = "https://api.ipify.org"
-}
-
-locals {
-  my_ip_cidr = "${chomp(data.http.my_ip.response_body)}/32"
-}
-
 # Security Group
-resource "aws_security_group" "sg" {
-  name        = "sg-metabase"
+resource "aws_security_group" "metabase" {
+  name        = "metabase-sg"
   description = "Allow SSH to my IP and web access"
   vpc_id      = aws_vpc.main.id
 
@@ -54,7 +45,7 @@ resource "aws_security_group" "sg" {
 
 # Internet Gateway
 resource "aws_internet_gateway" "igw" {
-  vpc_id = vpc_id
+  vpc_id = aws_vpc.main.id
 
   tags = {
     Name = "${var.project}-igw"
@@ -86,7 +77,7 @@ resource "aws_instance" "metabase" {
   ami                    = var.metabase_ami_id
   instance_type          = var.metabase_instance_type
   key_name               = var.ec2_key
-  vpc_security_group_ids = [aws_security_group.sg.id]
+  vpc_security_group_ids = [aws_security_group.metabase.id]
   subnet_id              = aws_subnet.public.id
 
   root_block_device {
@@ -95,7 +86,7 @@ resource "aws_instance" "metabase" {
     delete_on_termination = true
   }
 
-  user_data = templatefile("${path.module}/metabase-install.yaml")
+  user_data = "./metabase-install.yaml"
 
   tags = {
     Name = "${var.project}-metabase-instance"

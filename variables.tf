@@ -18,6 +18,7 @@ variable "vpc_cidr" {
 variable "ec2_key" {
   description = "EC2 Key Pair name"
   type        = string
+  default     = "ec2_key.pem"
 }
 
 ### Subnets
@@ -30,8 +31,15 @@ variable "public_subnet_cidr" {
 
 variable "private_subnet_cidrs" {
   description = "A list of CIDR blocks for private subnets."
-  type        = list(string)
-  default     = ["10.0.2.0/24", "10.0.3.0/24", "10.0.4.0/24"]
+  type = map(object({
+    cidr_block = string
+    az         = string
+  }))
+  default = {
+    "a" : { cidr_block : "10.0.2.0/24", az : "eu-north-1a" },
+    "b" : { cidr_block : "10.0.3.0/24", az : "eu-north-1b" },
+    "c" : { cidr_block : "10.0.4.0/24", az : "eu-north-1c" }
+  }
 }
 
 variable "secure_tcp_port" {
