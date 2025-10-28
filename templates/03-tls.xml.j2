@@ -1,0 +1,18 @@
+<openSSL>
+    <server>
+        <certificateFile>/etc/clickhouse-server/server.crt</certificateFile>
+        <privateKeyFile>/etc/clickhouse-server/server.key</privateKeyFile>
+        <dhParamsFile>/etc/clickhouse-server/dhparam.pem</dhParamsFile>
+        <loadDefaultCAFile>true</loadDefaultCAFile>
+        <cacheSessions>true</cacheSessions>
+        <disableProtocols>sslv2,sslv3</disableProtocols>
+        <preferServerCiphers>true</preferServerCiphers>
+    </server>
+    <client>
+        <loadDefaultCAFile>true</loadDefaultCAFile>
+        <cacheSessions>true</cacheSessions>
+        <disableProtocols>sslv2,sslv3</disableProtocols>
+        <preferServerCiphers>true</preferServerCiphers>          
+        <certificateAuthorityFile>/etc/clickhouse-server/server.crt</certificateAuthorityFile>    
+    </client>
+</openSSL>

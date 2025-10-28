@@ -25,7 +25,7 @@ resource "aws_lb" "clickhouse_nlb" {
   name               = "clickhouse-nlb"
   load_balancer_type = "network"
 
-  subnets  = [aws_subnet.public]
+  subnets  = [aws_subnet.public.id]
   internal = false
 
   tags = {

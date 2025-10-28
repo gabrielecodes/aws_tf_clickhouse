@@ -1,0 +1,41 @@
+<clickhouse>
+    <server_id>{{ server_ids[inventory_hostname] }}</server_id>
+
+    <listen_host>0.0.0.0</listen_host>
+    <https_port>8443</https_port>
+    <tcp_port>9000</tcp_port>
+    <tcp_port_secure>9440</tcp_port_secure>
+    <interserver_http_port>9009</interserver_http_port>
+
+    <path>/var/lib/clickhouse/</path>
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+    <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+    <error_log_path>/var/log/clickhouse-server/clickhouse-server.err.log</error_log_path>
+    <pid_path>/var/run/clickhouse-server/clickhouse-server.pid</pid_path>      
+            
+    <remote_servers>
+        <{{ cluster_name }}>
+            <shard>
+                <internal_replication>true</internal_replication>
+                %{ for dns_name in private_dns ~}
+                <replica>
+                    <host>{{ dns_name }}</host>
+                    <port>9440</port>
+                    <secure>1</secure>
+                </replica>
+                %{ endfor ~}
+            </shard>
+        </{{ cluster_name }}>
+    </remote_servers>
+        
+    <profiles>
+        <default>
+            <max_memory_usage>10000000000</max_memory_usage> 
+            <max_rows_to_read>10000000000</max_rows_to_read>
+        </default>
+    </profiles>
+
+    <include_from>/etc/clickhouse-server/conf.d/*.xml</include_from>
+
+</clickhouse>

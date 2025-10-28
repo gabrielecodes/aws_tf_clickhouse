@@ -115,14 +115,14 @@ resource "aws_instance" "clickhouse_node" {
   vpc_security_group_ids = [aws_security_group.clickhouse.id]
   subnet_id              = aws_subnet.private[each.value.subnet_cidr_key].id
 
-  user_data = templatefile("${path.module}/clickhouse-install.yaml", {
-    server_id                    = index(keys(var.clickhouse_nodes), each.key) + 1
-    is_coordinator               = each.key == "node1"
-    cluster_name                 = var.clickhouse_cluster_name
-    private_dns                  = values(aws_instance.clickhouse_node)[*].private_dns
-    metabase_cidr                = var.public_subnet_cidr
-    clickhouse_metabase_password = var.clickhouse_metabase_password # password for the metabase "user"
-  })
+  # user_data = templatefile("${path.module}/clickhouse-install.yaml", {
+  #   server_id                    = index(keys(var.clickhouse_nodes), each.key) + 1
+  #   is_coordinator               = each.key == "node1"
+  #   cluster_name                 = var.clickhouse_cluster_name
+  #   private_dns                  = [for instance in aws_instance.clickhouse_node : i.private_dns]
+  #   metabase_cidr                = var.public_subnet_cidr
+  #   clickhouse_metabase_password = var.clickhouse_metabase_password # password for the metabase "user"
+  # })
 
   root_block_device {
     volume_size           = 20
@@ -131,6 +131,61 @@ resource "aws_instance" "clickhouse_node" {
   }
 
   tags = {
-    Name = "${var.project}-airflow-instance"
+    Name = "${var.project}-clickhouse-instance"
+  }
+}
+
+# Inventory for Ansible
+resource "local_file" "inventory" {
+  content  = <<EOF
+[clickhouse_nodes]
+%{for ip in aws_instance.clickhouse[*].private_ip~}
+${ip} ansible_user=ubuntu ansible_ssh_private_key_file=./ec2_key.pem
+%{endfor~}
+EOF
+  filename = "./inventory.ini"
+}
+
+locals {
+  clickhouse_node_ids = {
+    for idx, key in keys(var.clickhouse_nodes) :
+    key => idx + 1
+  }
+}
+
+# Variables for Ansible
+resource "local_file" "ansible_vars" {
+  content  = <<EOF
+private_dns:
+%{for ip in aws_instance.clickhouse[*].private_ip~}
+  - ${ip}
+%{endfor}
+metabase_cidr: "${var.public_subnet_cidr}"
+clickhouse_metabase_password: "${var.clickhouse_metabase_password}"
+server_ids:
+%{for key, id in local.clickhouse_node_ids~}
+  ${key}: ${id}
+%{endfor~}
+EOF
+  filename = "./ansible_vars"
+}
+
+resource "null_resource" "clickhouse_config" {
+  depends_on = [aws_instance.clickhouse_node]
+
+  provisioner "remote-exec" {
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      host        = aws_instance.clickhouse_node["node1"].private_ip
+      private_key = file(var.ec2_key)
+    }
+
+    inline = [
+      "sudo apt-get update && sudo apt-get install -y ansible",
+      "echo '${local_file.inventory.content}' > /tmp/inventory.ini",
+      "echo '${local_file.ansible_vars.content}' > /tmp/ansible_vars.yml",
+      "ansible-playbook -i /tmp/inventory.ini clickhouse.yaml -e @/tmp/ansible_vars.yml"
+    ]
   }
 }

@@ -1,0 +1,95 @@
+---
+- name: Configure Clickhouse Cluster
+  hosts: [clickhouse_nodes]
+
+  tasks:
+    - name: Install prerequisite packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+        state: present
+        update_cache: yes
+
+    - name: Add ClickHouse GPG key
+      get_url:
+        url: https://packages.clickhouse.com/ClickHouse.gpg
+        dest: /etc/apt/trusted.gpg.d/clickhouse.gpg
+        mode: "0644"
+
+    - name: Add ClickHouse repository
+      copy:
+        dest: /etc/apt/sources.list.d/clickhouse.list
+        content: "deb [arch=amd64] https://packages.clickhouse.com/deb stable main"
+
+    - name: Install ClickHouse server and client
+      apt:
+        name:
+          - clickhouse-server
+          - clickhouse-client
+        state: present
+        update_cache: yes
+
+    - name: Generate self-signed SSL certificates
+      template:
+        src: cluster.conf.j2
+        dest: /etc/ssl/clickhouse/cluster.conf
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Generate cluster certificate
+      shell: |
+        openssl req -newkey rsa:4096 -nodes -keyout /etc/clickhouse-server/server.key \
+          -x509 -days 365 -out /etc/clickhouse-server/server.crt \
+          -config /etc/ssl/clickhouse/cluster.conf
+        openssl dhparam -out /etc/clickhouse-server/dhparam.pem 4096
+      args:
+        creates: /etc/clickhouse-server/server.crt
+
+    - name: Configure ClickHouse
+      template:
+        src: 01-main.xml.j2
+        dest: /etc/clickhouse-server/config.d/01-main.xml
+        owner: root
+        group: root
+
+    - name: Add logger config
+      template:
+        src: 02-logger.xml.j2
+        dest: /etc/clickhouse-server/config.d/02-logger.xml
+        owner: root
+        group: root
+
+    - name: Add TLS config
+      template:
+        src: 03-tls.xml.j2
+        dest: /etc/clickhouse-server/config.d/03-tls.xml
+        owner: root
+        group: root
+
+    - name: Add Keeper config
+      template:
+        src: 04-keeper.xml.j2
+        dest: /etc/clickhouse-server/config.d/04-keeper.xml
+
+    - |
+      cat <<EOF > /etc/clickhouse-server/config.d/05-metabase.xml
+      <yandex>
+          <users>
+              <metabase>
+                  <password>${clickhouse_metabase_password}</password>
+                  <networks>
+                      <ip>${metabase_cidr}</ip>
+                  </networks>
+                  <profile>default</profile>
+                  <quota>default</quota>
+              </metabase>
+          </users>
+      </yandex>
+      EOF
+
+    # Start ClickHouse
+    - systemctl enable clickhouse-server
+    - systemctl start clickhouse-server
