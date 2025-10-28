@@ -11,23 +11,23 @@
             <auto_create_tables>true</auto_create_tables>
         </coordination_settings>
         <raft_configuration>
-            %{ for id, dns_name in private_dns ~}
+            {% for dns_name in private_dns %}
             <server>
-                <id>{{ id + 1 }}</id>
+                <id>{{ loop.index + 1 }}</id>
                 <hostname>{{ dns_name }}</hostname>
                 <port>9234</port>
             </server>
-            %{ endfor ~}
+            {% endfor %}
         </raft_configuration>
     </keeper_server>
 
     <zookeeper>
-        %{ for id, dns_name in private_dns ~}
+        {% for dns_name in private_dns %}
         <node>
             <host>{{ dns_name }}</host>
             <port>9234</port>
         </node>
-        %{ endfor ~}
+        {% endfor %}
         <session_timeout_ms>30000</session_timeout_ms>
     </zookeeper>
 </clickhouse>

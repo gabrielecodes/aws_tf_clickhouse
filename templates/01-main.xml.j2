@@ -18,13 +18,13 @@
         <{{ cluster_name }}>
             <shard>
                 <internal_replication>true</internal_replication>
-                %{ for dns_name in private_dns ~}
+                {% for dns_name in private_dns %}
                 <replica>
                     <host>{{ dns_name }}</host>
                     <port>9440</port>
                     <secure>1</secure>
                 </replica>
-                %{ endfor ~}
+                {% endfor %}
             </shard>
         </{{ cluster_name }}>
     </remote_servers>

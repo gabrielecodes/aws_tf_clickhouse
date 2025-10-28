@@ -73,23 +73,18 @@
       template:
         src: 04-keeper.xml.j2
         dest: /etc/clickhouse-server/config.d/04-keeper.xml
+        owner: root
+        group: root
 
-    - |
-      cat <<EOF > /etc/clickhouse-server/config.d/05-metabase.xml
-      <yandex>
-          <users>
-              <metabase>
-                  <password>${clickhouse_metabase_password}</password>
-                  <networks>
-                      <ip>${metabase_cidr}</ip>
-                  </networks>
-                  <profile>default</profile>
-                  <quota>default</quota>
-              </metabase>
-          </users>
-      </yandex>
-      EOF
+    - name: Add Metabase user
+      template:
+        src: 05-metabase.xml.j2
+        dest: /etc/clickhouse-server/config.d/05-metabase.xml
+        owner: root
+        group: root
 
-    # Start ClickHouse
-    - systemctl enable clickhouse-server
-    - systemctl start clickhouse-server
+    - name: Ensure ClickHouse service is running
+      systemd:
+        name: clickhouse-server
+        enabled: yes
+        state: started

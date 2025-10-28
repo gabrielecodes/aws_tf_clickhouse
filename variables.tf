@@ -18,7 +18,7 @@ variable "vpc_cidr" {
 variable "ec2_key" {
   description = "EC2 Key Pair name"
   type        = string
-  default     = "ec2_key.pem"
+  default     = "ec2_key"
 }
 
 ### Subnets
@@ -107,17 +107,17 @@ variable "clickhouse_nodes" {
   default = {
     node1 = {
       instance_type   = "t3.small"
-      subnet_cidr_key = "10.0.2.0/24"
+      subnet_cidr_key = "a"
       replica_id      = 1
     }
     node2 = {
       instance_type   = "t3.small"
-      subnet_cidr_key = "10.0.3.0/24"
+      subnet_cidr_key = "b"
       replica_id      = 2
     }
     node3 = {
       instance_type   = "t3.small"
-      subnet_cidr_key = "10.0.4.0/24"
+      subnet_cidr_key = "c"
       replica_id      = 2
     }
   }

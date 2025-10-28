@@ -100,3 +100,7 @@ The Terraform configuration sets up the following AWS resources:
     ```
 
     Confirm with `yes` when prompted.
+
+
+## TODO
+1. use bastion host to apply the ansible config

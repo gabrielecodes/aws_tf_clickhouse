@@ -96,8 +96,7 @@ resource "aws_security_group_rule" "clickhouse_self_ingress" {
   protocol    = "tcp"
   description = "Allow self-reference for port ${each.value}"
 
-  security_group_id = aws_security_group.clickhouse.id
-
+  security_group_id        = aws_security_group.clickhouse.id
   source_security_group_id = aws_security_group.clickhouse.id
 }
 
@@ -130,16 +129,24 @@ resource "aws_instance" "clickhouse_node" {
     delete_on_termination = true
   }
 
+  depends_on = [aws_key_pair.ec2_key, aws_subnet.private]
+
   tags = {
     Name = "${var.project}-clickhouse-instance"
   }
+}
+
+# Temporary public ip for node1 to apply the Ansible config
+resource "aws_eip" "node1" {
+  count    = contains(keys(var.clickhouse_nodes), "node1") ? 1 : 0
+  instance = aws_instance.clickhouse_node["node1"].id
 }
 
 # Inventory for Ansible
 resource "local_file" "inventory" {
   content  = <<EOF
 [clickhouse_nodes]
-%{for ip in aws_instance.clickhouse[*].private_ip~}
+%{for ip in [for inst in aws_instance.clickhouse_node : inst.private_ip]~}
 ${ip} ansible_user=ubuntu ansible_ssh_private_key_file=./ec2_key.pem
 %{endfor~}
 EOF
@@ -157,7 +164,7 @@ locals {
 resource "local_file" "ansible_vars" {
   content  = <<EOF
 private_dns:
-%{for ip in aws_instance.clickhouse[*].private_ip~}
+%{for ip in [for inst in aws_instance.clickhouse_node : inst.private_ip]~}
   - ${ip}
 %{endfor}
 metabase_cidr: "${var.public_subnet_cidr}"
@@ -173,11 +180,15 @@ EOF
 resource "null_resource" "clickhouse_config" {
   depends_on = [aws_instance.clickhouse_node]
 
+  triggers = {
+    private_dns = join(",", [for instance in aws_instance.clickhouse_node : instance.private_dns])
+  }
+
   provisioner "remote-exec" {
     connection {
       type        = "ssh"
       user        = "ubuntu"
-      host        = aws_instance.clickhouse_node["node1"].private_ip
+      host        = aws_instance.clickhouse_node["node1"].public_ip
       private_key = file(var.ec2_key)
     }
 

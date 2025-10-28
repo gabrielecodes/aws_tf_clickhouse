@@ -72,6 +72,11 @@ resource "aws_route_table_association" "public_rt_assoc" {
 # COMPUTE
 ##################################
 
+resource "aws_key_pair" "ec2_key" {
+  key_name   = "ec2_key"
+  public_key = file("./ec2_key.pub")
+}
+
 # Metabase instance
 resource "aws_instance" "metabase" {
   ami                    = var.metabase_ami_id
