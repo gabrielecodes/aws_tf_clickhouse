@@ -68,6 +68,44 @@ resource "aws_route_table_association" "public_rt_assoc" {
   route_table_id = aws_route_table.public_rt.id
 }
 
+
+# NAT Gateway
+resource "aws_eip" "nat" {}
+
+# Put the NAT Gateway in the public subnet
+resource "aws_nat_gateway" "gw" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public.id
+
+  tags = {
+    Name = "${var.project}-nat-gateway"
+  }
+}
+
+# Update the route table for the private subnet
+resource "aws_route" "private_nat_route" {
+  route_table_id         = aws_route_table.private.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.gw.id
+}
+
+# Route table for the private subnets
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "${var.project}-private-rt"
+  }
+}
+
+# Associate the route table to the private subnets
+resource "aws_route_table_association" "private_assoc" {
+  for_each = aws_subnet.private
+
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.private.id
+}
+
 ##################################
 # COMPUTE
 ##################################
@@ -95,5 +133,71 @@ resource "aws_instance" "metabase" {
 
   tags = {
     Name = "${var.project}-metabase-instance"
+  }
+}
+
+# Inventory for Ansible
+resource "local_file" "inventory" {
+  content  = <<EOF
+[clickhouse_nodes]
+%{for ip in [for inst in aws_instance.clickhouse_node : inst.private_ip]~}
+${ip} ansible_user=ubuntu ansible_ssh_private_key_file=/tmp/ec2_key
+%{endfor~}
+EOF
+  filename = "./inventory.ini"
+}
+
+locals {
+  clickhouse_node_ids = {
+    for idx, key in keys(var.clickhouse_nodes) :
+    key => idx + 1
+  }
+}
+
+# Variables for Ansible
+resource "local_file" "ansible_vars" {
+  content  = <<EOF
+private_dns:
+%{for ip in [for inst in aws_instance.clickhouse_node : inst.private_ip]~}
+  - ${ip}
+%{endfor}
+metabase_cidr: "${var.public_subnet_cidr}"
+clickhouse_metabase_password: "${var.clickhouse_metabase_password}"
+server_ids:
+%{for key, id in local.clickhouse_node_ids~}
+  ${key}: ${id}
+%{endfor~}
+EOF
+  filename = "./ansible_vars.yaml"
+}
+
+resource "null_resource" "clickhouse_config" {
+  depends_on = [aws_instance.clickhouse_node]
+
+  triggers = {
+    private_dns = join(",", [for instance in aws_instance.clickhouse_node : instance.private_dns])
+  }
+
+  provisioner "remote-exec" {
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      host        = aws_instance.metabase.public_ip
+      private_key = file(var.ec2_key)
+    }
+
+    inline = [
+      "set -euxo",
+      "cat > /tmp/ec2_key <<EOF\n${file(var.ec2_key)}\nEOF",
+      "chmod 600 /tmp/ec2_key",
+      "cat > /tmp/clickhouse.yaml <<EOF\n${file("./clickhouse.yaml")}\nEOF",
+      "cat > /tmp/inventory.ini <<EOF\n${local_file.inventory.content}\nEOF",
+      "cat > /tmp/ansible_vars.yml <<EOF\n${local_file.ansible_vars.content}\nEOF",
+
+      "for file in ./templates/*; do\n cat< /tmp/${file} <<"
+
+      "sudo apt-get update && sudo apt-get install -y ansible",
+      "ansible-playbook -i /tmp/inventory.ini /tmp/clickhouse.yaml -e @/tmp/ansible_vars.yaml"
+    ]
   }
 }

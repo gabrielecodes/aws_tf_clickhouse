@@ -1,6 +1,7 @@
 ---
 - name: Configure Clickhouse Cluster
   hosts: [clickhouse_nodes]
+  become: yes
 
   tasks:
     - name: Install prerequisite packages
@@ -9,19 +10,23 @@
           - apt-transport-https
           - ca-certificates
           - curl
+          - gnupg
         state: present
         update_cache: yes
 
-    - name: Add ClickHouse GPG key
-      get_url:
-        url: https://packages.clickhouse.com/ClickHouse.gpg
-        dest: /etc/apt/trusted.gpg.d/clickhouse.gpg
-        mode: "0644"
+    - name: Add Clickhouse GPG key
+      ansible.builtin.apt_key:
+        url: https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key
+        keyring: /usr/share/keyrings/clickhouse-keyring.gpg
 
-    - name: Add ClickHouse repository
-      copy:
-        dest: /etc/apt/sources.list.d/clickhouse.list
-        content: "deb [arch=amd64] https://packages.clickhouse.com/deb stable main"
+    - name: Add Clickhouse repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch={{ ansible_architecture }}] https://packages.clickhouse.com/deb stable main"
+        filename: clickhouse
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
 
     - name: Install ClickHouse server and client
       apt:
