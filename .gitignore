@@ -43,3 +43,6 @@ terraform.rc
 *.key
 *.pub
 *_key
+
+*.ini
+ansible_vars.*

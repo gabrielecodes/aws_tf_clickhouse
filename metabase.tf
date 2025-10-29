@@ -136,6 +136,11 @@ resource "aws_instance" "metabase" {
   }
 }
 
+output "metabase_public_ip" {
+  value       = aws_instance.metabase.public_ip
+  description = "Public instance ip"
+}
+
 # Inventory for Ansible
 resource "local_file" "inventory" {
   content  = <<EOF
@@ -147,10 +152,15 @@ EOF
   filename = "./inventory.ini"
 }
 
+output "local_inventory_content" {
+  value       = local_file.inventory.content
+  description = "Invenotry file for Ansible"
+}
+
 locals {
   clickhouse_node_ids = {
     for idx, key in keys(var.clickhouse_nodes) :
-    key => idx + 1
+    aws_instance.clickhouse_node[key].private_ip => idx + 1
   }
 }
 
@@ -168,36 +178,50 @@ server_ids:
   ${key}: ${id}
 %{endfor~}
 EOF
-  filename = "./ansible_vars.yaml"
+  filename = "./ansible_vars"
 }
 
-resource "null_resource" "clickhouse_config" {
-  depends_on = [aws_instance.clickhouse_node]
-
-  triggers = {
-    private_dns = join(",", [for instance in aws_instance.clickhouse_node : instance.private_dns])
-  }
-
-  provisioner "remote-exec" {
-    connection {
-      type        = "ssh"
-      user        = "ubuntu"
-      host        = aws_instance.metabase.public_ip
-      private_key = file(var.ec2_key)
-    }
-
-    inline = [
-      "set -euxo",
-      "cat > /tmp/ec2_key <<EOF\n${file(var.ec2_key)}\nEOF",
-      "chmod 600 /tmp/ec2_key",
-      "cat > /tmp/clickhouse.yaml <<EOF\n${file("./clickhouse.yaml")}\nEOF",
-      "cat > /tmp/inventory.ini <<EOF\n${local_file.inventory.content}\nEOF",
-      "cat > /tmp/ansible_vars.yml <<EOF\n${local_file.ansible_vars.content}\nEOF",
-
-      "for file in ./templates/*; do\n cat< /tmp/${file} <<"
-
-      "sudo apt-get update && sudo apt-get install -y ansible",
-      "ansible-playbook -i /tmp/inventory.ini /tmp/clickhouse.yaml -e @/tmp/ansible_vars.yaml"
-    ]
-  }
+output "ansible_vars_content" {
+  value       = local_file.ansible_vars.content
+  description = "Variables for Ansible"
 }
+
+# NOTE: This is only for testing
+# resource "null_resource" "clickhouse_config" {
+#   depends_on = [aws_instance.clickhouse_node]
+
+#   triggers = {
+#     private_dns = join(",", [for instance in aws_instance.clickhouse_node : instance.private_dns])
+#   }
+
+#   provisioner "local-exec" {
+#     connection {
+#       type        = "ssh"
+#       user        = "ubuntu"
+#       host        = aws_instance.metabase.public_ip
+#       private_key = file(var.ec2_key)
+#     }
+
+#     command = "scp -i ${var.ec2_key} -r ./templates/* ubuntu@${aws_instance.metabase.public_ip}:/tmp"
+#   }
+
+#   provisioner "remote-exec" {
+#     connection {
+#       type        = "ssh"
+#       user        = "ubuntu"
+#       host        = aws_instance.metabase.public_ip
+#       private_key = file(var.ec2_key)
+#     }
+
+#     inline = [
+#       "set -euxo",
+#       "cat > /tmp/ec2_key <<EOF\n${file(var.ec2_key)}\nEOF",
+#       "chmod 600 /tmp/ec2_key",
+#       "cat > /tmp/clickhouse.yaml <<EOF\n${file("./clickhouse.yaml")}\nEOF",
+#       "cat > /tmp/inventory.ini <<EOF\n${local_file.inventory.content}\nEOF",
+#       "cat > /tmp/ansible_vars.yml <<EOF\n${local_file.ansible_vars.content}\nEOF",
+#       "sudo apt-get update && sudo apt-get install -y ansible",
+#       "ansible-playbook -i /tmp/inventory.ini /tmp/clickhouse.yaml --user ubuntu -e @/tmp/ansible_vars.yml"
+#     ]
+#   }
+# }

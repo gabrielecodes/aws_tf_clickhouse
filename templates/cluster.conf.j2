@@ -13,6 +13,6 @@ subjectAltName = @alt_names
 
 [ alt_names ]
 DNS.1 = clickhouse.your-company.com
-{% for id, dns_name in private_dns | dictsort %}
+{% for id, dns_name in private_dns %}
 DNS.{{ id + 2 }} = {{ dns_name }}
 {% endfor %}

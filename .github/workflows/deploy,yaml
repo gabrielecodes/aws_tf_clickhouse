@@ -1,0 +1,63 @@
+name: Deploy Infra and Configure ClickHouse
+
+# on:
+#   pull_request:
+#     types:
+#       - closed
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy_and_configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.PROJECT_ID }}:role/GitHubActionsOidcRole
+          aws-region: us-east-1
+
+      - name: Terraform Init and Apply
+        id: tf_apply
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          terraform init
+          terraform apply -auto-approve -var-file=${{ steps.generate_key.outputs.tfvars_file }}
+
+      - name: Generate SSH Key After Instances are Up
+        id: generate_key
+        run: |
+          KEY_PATH="ec2_key"
+          ssh-keygen -t rsa -b 4096 -f $KEY_PATH -N "" -m PEM
+          chmod 600 $KEY_PATH
+
+          METABASE_IP=$(terraform output metabase_public_ip)
+          scp -i ec2_key -o StrictHostKeyChecking=no -r ./templates/* ubuntu@$METABASE_IP:/tmp
+
+          echo "tfvars_file=/tmp/terraform_key.tfvars" >> $GITHUB_OUTPUT
+
+      - name: Prepare Ansible Config
+        id: prepare_ansible
+        run: |
+          set -euxo
+          sudo apt-get update && sudo apt-get install -y ansible
+          cp ./clickhouse.yaml /tmp/clickhouse.yaml
+          terraform output local_inventory_content > /tmp/inventory.ini
+          terraform output ansible_vars_content > /tmp/ansible_vars.yml
+
+      - name: Run Ansible Playbook
+        run: |
+          set -euxo
+          # The execution command is now run directly on the GitHub runner (the control node)
+          ansible-playbook \
+            -i /tmp/inventory.ini \
+            /tmp/clickhouse.yaml \
+            --user ubuntu \
+            -e @/tmp/ansible_vars.yml \
